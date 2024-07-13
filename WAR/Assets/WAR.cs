@@ -13,12 +13,25 @@ public class WAR : MonoBehaviour {
    public KMBombInfo Bomb;
    public KMAudio Audio;
 
+   public KMSelectable Module;
+
    public AudioSource Music;
    public AudioClip[] MusicParts;
+
+   public SpriteRenderer BombRenderer;
+   public Sprite[] Bombs;
+   public GameObject DeadBomb;
+   public GameObject LightsParent;
+   public GameObject LeftLight;
+   public GameObject RightLight;
+
+   public GameObject NumbersandColonsAndDoohickeysAndSuch;
 
    public CanvasGroup VignetteScreen;
 
    public static string[] ignoredModules = null;
+
+   private float DefaultGameMusicVolume;
 
    int ModCount = 8008135;
    int Stage;
@@ -37,22 +50,32 @@ public class WAR : MonoBehaviour {
    Coroutine Countdown;
    Coroutine AddTime;
    Coroutine Fade;
+   Coroutine Spaztic;
+   Coroutine Flicker;
 
    bool Adding;
    bool IsFading;
+   bool ActiveTimer;
 
    static int ModuleIdCounter = 1;
    int ModuleId;
    private bool ModuleSolved;
 
+   bool StrikeReset;
+
    int TimeToAdd = 30;
    int CurrentTime = 0;
    int CurrentlyBeingAdded;
 
+   bool PlaySFX = true;
+   bool PlayThousandMarch = true;
+
+   bool Selected;
    bool MusicPlaying;
+   bool TenSecondWarning;
 
    Dictionary<string, int> ModToTime = new Dictionary<string, int>();
-   
+
 
    void Awake () { //Avoid doing calculations in here regarding edgework. Just use this for setting up buttons for simplicity.
       ModuleId = ModuleIdCounter++;
@@ -64,6 +87,18 @@ public class WAR : MonoBehaviour {
       */
 
       //button.OnInteract += delegate () { buttonPress(); return false; };
+
+      Module.OnFocus += delegate () { Selected = true; };
+      Module.OnDefocus += delegate () { Selected = false; };
+
+      try {
+         DefaultGameMusicVolume = GameMusicControl.GameMusicVolume;
+      }
+      catch (Exception) { }
+
+      if (Application.isEditor) {
+         Selected = true;
+      }
 
       if (ignoredModules == null) {
          ignoredModules = GetComponent<KMBossModule>().GetIgnoredModules("WAR", new string[] {
@@ -126,7 +161,7 @@ public class WAR : MonoBehaviour {
    }
 
    void OnDestroy () { //Shit you need to do when the bomb ends
-      
+      GameMusic(true);
    }
 
    void Activate () { //Shit that should happen when the bomb arrives (factory)/Lights turn on
@@ -134,14 +169,22 @@ public class WAR : MonoBehaviour {
    }
 
    IEnumerator PlayMusic () {
+      Music.volume = 1;
+      if (Music.isPlaying) {
+         Music.Stop();
+      }
       MusicPlaying = true;
+      GameMusic(false);
+      Music.clip = MusicParts[0];
       Music.Play();
       while (Music.isPlaying) {
          yield return null;
       }
-      Music.clip = MusicParts[1];
-      Music.loop = true;
-      Music.Play();
+      if (!(StrikeReset || ModuleSolved)) {
+         Music.clip = MusicParts[1];
+         Music.loop = true;
+         Music.Play();
+      }
    }
 
    void Start () { //Shit that you calculate, usually a majority if not all of the module
@@ -182,6 +225,7 @@ public class WAR : MonoBehaviour {
       ModToTime.Add("Übermodule", 7);
       ModToTime.Add("Whiteout", 7);
 
+      StartCoroutine(AlternatingFlash());
 
       foreach (string Mod in Bomb.GetModuleNames()) {
          Debug.Log(Mod);
@@ -191,6 +235,28 @@ public class WAR : MonoBehaviour {
             }
          }
       }
+
+      Spaztic = StartCoroutine(BombSpasm());
+   }
+
+   IEnumerator AlternatingFlash () {
+      while (true) {
+         LeftLight.SetActive(true);
+         RightLight.SetActive(false);
+         yield return new WaitForSeconds(.125f);
+         LeftLight.SetActive(false);
+         RightLight.SetActive(true);
+         yield return new WaitForSeconds(.125f);
+      }
+   }
+
+   IEnumerator BombSpasm () {
+      while (true) {
+         for (int i = 0; i < 3; i++) {
+            BombRenderer.sprite = Bombs[i];
+            yield return new WaitForSeconds((float) 1 / 30);
+         }
+      }
    }
 
    IEnumerator AddTimeToClockAnim () {
@@ -198,7 +264,10 @@ public class WAR : MonoBehaviour {
       if (Countdown != null) {
          StopCoroutine(Countdown);
       }
-      Audio.PlaySoundAtTransform("Pickup", transform);
+      if (PlaySFX) {
+         Audio.PlaySoundAtTransform("Pickup", transform);
+      }
+      
       while (CurrentlyBeingAdded > 0) { //1.35f
          CurrentTime++;
          
@@ -215,8 +284,36 @@ public class WAR : MonoBehaviour {
       while (CurrentTime > 0) {
          yield return new WaitForSeconds(1f);
          CurrentTime--;
+         if (PlaySFX) {
+            Audio.PlaySoundAtTransform("Tick", transform);
+         }
       }
-      
+      yield return new WaitForSeconds(1f);
+      if (PlaySFX) {
+         Audio.PlaySoundAtTransform("Tick", transform);
+      }
+      yield return new WaitForSeconds(1f);
+      StartCoroutine(OutOfTime());
+   }
+
+   IEnumerator OutOfTime () {
+      Strike();
+      Music.Stop();
+      //Music.volume = 1;
+      ActiveTimer = false;
+      //Debug.Log(Music.isPlaying);
+
+      Audio.PlaySoundAtTransform("TimesUp", transform);
+      while (VignetteScreen.alpha > 0) {
+         StrikeReset = true; 
+         yield return null;
+      }
+      Countdown = null;
+      MusicPlaying = false;
+      IsFading = false;
+      BombRenderer.gameObject.SetActive(true);
+      NumbersandColonsAndDoohickeysAndSuch.SetActive(false);
+      StrikeReset = false;
    }
 
    void StartFade () {
@@ -244,9 +341,7 @@ public class WAR : MonoBehaviour {
       var duration = 2f; //The differences between smoothness in the test harness and in game make me want to kms
       var elapsed = 0f;
 
-
-
-      while (true) {
+      while (!ModuleSolved && !StrikeReset) {
          while (elapsed < duration) {
             VignetteScreen.alpha = Mathf.Lerp(.33f, 1, elapsed / duration);
             yield return null;
@@ -262,9 +357,41 @@ public class WAR : MonoBehaviour {
          VignetteScreen.alpha = .33f;
          elapsed = 0f;
       }
+
+      while (VignetteScreen.alpha > 0) {
+         VignetteScreen.alpha = Mathf.Lerp(.33f, 0f, elapsed / duration);
+         yield return null;
+         elapsed += Time.deltaTime;
+      }
    }
 
    void Update () { //Shit that happens at any point after initialization
+
+      if (ActiveTimer && CurrentTime <= 10 && !Adding) {
+         LightsParent.SetActive(true);
+      }
+      else {
+         LightsParent.SetActive(false);
+      }
+
+      if (Selected && Input.GetKeyDown(KeyCode.X)) {
+         PlayThousandMarch = !PlayThousandMarch;
+      }
+      if (Selected && Input.GetKeyDown(KeyCode.C)) {
+         PlaySFX = !PlaySFX;
+         Audio.PlaySoundAtTransform("Taunt", transform);
+      }
+
+      if (PlayThousandMarch) {
+         Music.volume = 1;
+         if (MusicPlaying) {
+            GameMusic(false);
+         }
+      }
+      else {
+         Music.volume = 0;
+         GameMusic(true);
+      }
 
       //Debug.Log(CurrentTime);
       if (!Adding) {
@@ -284,6 +411,9 @@ public class WAR : MonoBehaviour {
       
 
       if (ModuleSolved || !WaitForModCount) {
+         if (Countdown != null) {
+            StopCoroutine(Countdown);
+         }
          return;
       }
 
@@ -300,7 +430,22 @@ public class WAR : MonoBehaviour {
          return;
       }
       if (Solved > Stage) { //Put whatever your mod is supposed to do after a solve here. If you want a delay of solves for the purposes of TP, make it a coroutine.
+
+         Stage++;
+
+         if (StrikeReset) {
+            return;
+         }
+
+         ActiveTimer = true;
+
          CurrentlyBeingAdded += TimeToAdd;
+         BombRenderer.gameObject.SetActive(false);
+         NumbersandColonsAndDoohickeysAndSuch.SetActive(true);
+         /*if (Spaztic != null) {
+            StopCoroutine(Spaztic);
+            //DeadBomb.SetActive(true);
+         }*/
          if (!MusicPlaying) {
             StartCoroutine(PlayMusic());
          }
@@ -310,18 +455,31 @@ public class WAR : MonoBehaviour {
          if (!Adding) {
             AddTime = StartCoroutine(AddTimeToClockAnim());
          }
-         
-         Debug.Log(Stage); //Stage is 0 indexed, so adjust what you need for your specific circumstances.
-         Stage++;
       }
    }
 
    void Solve () {
       GetComponent<KMBombModule>().HandlePass();
+      ModuleSolved = true;
+      GameMusic(true);
+      StopCoroutine(Count());
+      ActiveTimer = false;
    }
 
    void Strike () {
       GetComponent<KMBombModule>().HandleStrike();
+      GameMusic(true);
+   }
+
+   void GameMusic (bool TurnOnGameMusic) {
+      if (!Application.isEditor) {
+         if (TurnOnGameMusic) {
+            GameMusicControl.GameMusicVolume = DefaultGameMusicVolume;
+         }
+         else {
+            GameMusicControl.GameMusicVolume = 0;
+         }
+      }
    }
 
 #pragma warning disable 414
