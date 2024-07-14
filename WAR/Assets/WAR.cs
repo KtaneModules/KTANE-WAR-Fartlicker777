@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -47,6 +48,8 @@ public class WAR : MonoBehaviour {
    public SpriteRenderer Colon;
    public Sprite[] ColonColors;
 
+   WARSettings Settings = new WARSettings();
+
    Coroutine Countdown;
    Coroutine AddTime;
    Coroutine Fade;
@@ -74,12 +77,59 @@ public class WAR : MonoBehaviour {
    bool MusicPlaying;
    bool TenSecondWarning;
 
+   bool ZenModeActive;
+
    Dictionary<string, int> ModToTime = new Dictionary<string, int>();
 
+   class WARSettings {
+      public bool Detonation = false;
+   }
+
+   static Dictionary<string, object>[] TweaksEditorSettings = new Dictionary<string, object>[]
+   {
+      new Dictionary<string, object>
+      {
+         { "Filename", "WARSettings.json" },
+         { "Name", "WAR Settings" },
+         { "Listing", new List<Dictionary<string, object>>{
+            new Dictionary<string, object>
+            {
+               { "Key", "Detonation" },
+               { "Text", "The module will detonate the bomb upon running out of time." }
+            }
+         } }
+      }
+   };
 
    void Awake () { //Avoid doing calculations in here regarding edgework. Just use this for setting up buttons for simplicity.
       ModuleId = ModuleIdCounter++;
       GetComponent<KMBombModule>().OnActivate += Activate;
+
+      if (!Application.isEditor) {
+         ModConfig<WARSettings> modConfig = new ModConfig<WARSettings>("WARSettings");
+         //Read from the settings file, or create one if one doesn't exist
+         Settings = modConfig.Settings;
+         //Update the settings file in case there was an error during read
+         modConfig.Settings = Settings;
+      }
+
+      
+
+
+      string missionDesc = KTMissionGetter.Mission.Description;
+      if (missionDesc != null) {
+         Regex regex = new Regex(@"\^WAR_DETONATE=$(true|false)");
+         var match = regex.Match(missionDesc);
+         if (match.Success) {
+            string[] options = match.Value.Replace("[WAR_DETONATE=] ", "").Split(',');
+            bool[] values = new bool[options.Length];
+            for (int i = 0; i < options.Length; i++)
+               values[i] = options[i] == "true" ? true : false;
+            Settings.Detonation = values[0];
+         }
+      }
+
+
       /*
       foreach (KMSelectable object in keypad) {
           object.OnInteract += delegate () { keypadPress(object); return false; };
@@ -169,6 +219,8 @@ public class WAR : MonoBehaviour {
    }
 
    IEnumerator PlayMusic () {
+      /*Audio.PlaySoundAtTransform("ShotgunPickup", transform);
+      yield return new WaitForSeconds(.8f);*/
       Music.volume = 1;
       if (Music.isPlaying) {
          Music.Stop();
@@ -187,12 +239,26 @@ public class WAR : MonoBehaviour {
       }
    }
 
+   IEnumerator DETONATE () {
+      if (Settings.Detonation) {
+         if (ZenModeActive) {
+            yield return null;
+            Application.Quit();
+         }
+         while (true) {
+            Strike();
+            yield return new WaitForSeconds(.1f);
+         }
+      }
+   }
+
    void Start () { //Shit that you calculate, usually a majority if not all of the module
       WaitForModCount = true;
       ModToTime.Add("14", 90);
       ModToTime.Add("42", 30);
       ModToTime.Add("501", 30);
       ModToTime.Add("A>N<D", 20);
+      ModToTime.Add("Black Arrows", 20);
       ModToTime.Add("Brainf---", 15);
       ModToTime.Add("The Board Walk", 30);
       ModToTime.Add("Busy Beaver", 90);
@@ -205,14 +271,14 @@ public class WAR : MonoBehaviour {
       ModToTime.Add("Forget Me Later", 25);
       ModToTime.Add("Forget Me Not", 7);
       ModToTime.Add("Forget Perspective", 120);
-      ModToTime.Add("Forget The Colors", 240);
+      ModToTime.Add("Forget The Colors", 60);
       ModToTime.Add("Forget This", 15);
       ModToTime.Add("Forget Us Not", 18);
       ModToTime.Add("Iconic", 3);
       ModToTime.Add("Keypad Directionality", 15);
       ModToTime.Add("Kugelblitz", 40);
       ModToTime.Add("Multitask", 20);
-      ModToTime.Add("OmegaForget", 120);
+      ModToTime.Add("OmegaForget", 180);
       ModToTime.Add("Reporting Anomalies", 30);
       ModToTime.Add("RPS Judging", 25);
       ModToTime.Add("Security Council", 25);
@@ -308,12 +374,18 @@ public class WAR : MonoBehaviour {
          StrikeReset = true; 
          yield return null;
       }
+
+      GameMusic(true);
       Countdown = null;
       MusicPlaying = false;
       IsFading = false;
       BombRenderer.gameObject.SetActive(true);
       NumbersandColonsAndDoohickeysAndSuch.SetActive(false);
       StrikeReset = false;
+      if (Settings.Detonation) {
+         StartCoroutine(DETONATE());
+      }
+      
    }
 
    void StartFade () {
@@ -463,6 +535,15 @@ public class WAR : MonoBehaviour {
       ModuleSolved = true;
       GameMusic(true);
       StopCoroutine(Count());
+      if (Bomb.GetStrikes() == 0) {
+         Audio.PlaySoundAtTransform("PRank", transform);
+      }
+      else if (Bomb.GetStrikes() == 1) {
+         Audio.PlaySoundAtTransform("ARank", transform);
+      }
+      else {
+         Audio.PlaySoundAtTransform("DRank", transform);
+      }
       ActiveTimer = false;
    }
 
@@ -483,11 +564,17 @@ public class WAR : MonoBehaviour {
    }
 
 #pragma warning disable 414
-   private readonly string TwitchHelpMessage = @"Use !{0} mute to mute the music.";
+   private readonly string TwitchHelpMessage = @"Use !{0} toggleSFX to mute the music. Use !{0} toggleMusic to mute the music";
 #pragma warning restore 414
 
    IEnumerator ProcessTwitchCommand (string Command) {
       yield return null;
+      if (Command == "toggleSFX") {
+         PlaySFX = !PlaySFX;
+      }
+      if (Command == "toggleMusic") {
+         PlayThousandMarch = !PlayThousandMarch;
+      }
    }
 
    IEnumerator TwitchHandleForcedSolve () {
