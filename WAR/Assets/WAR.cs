@@ -579,8 +579,7 @@ public class WAR : MonoBehaviour {
       }
    }
 
-   IEnumerator TwitchHandleForcedSolve () {
+   void TwitchHandleForcedSolve () {
       Autosolved = true;
-      while (!ModuleSolved) yield return true;
    }
 }
