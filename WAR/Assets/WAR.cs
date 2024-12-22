@@ -59,6 +59,7 @@ public class WAR : MonoBehaviour {
    bool Adding;
    bool IsFading;
    bool ActiveTimer;
+   bool Autosolved;
 
    static int ModuleIdCounter = 1;
    int ModuleId;
@@ -548,7 +549,8 @@ public class WAR : MonoBehaviour {
    }
 
    void Strike () {
-      GetComponent<KMBombModule>().HandleStrike();
+      if (!Autosolved)
+         GetComponent<KMBombModule>().HandleStrike();
       GameMusic(true);
    }
 
@@ -564,7 +566,7 @@ public class WAR : MonoBehaviour {
    }
 
 #pragma warning disable 414
-   private readonly string TwitchHelpMessage = @"Use !{0} toggleSFX to mute the music. Use !{0} toggleMusic to mute the music";
+   private readonly string TwitchHelpMessage = @"Use !{0} toggleSFX to mute the SFX. Use !{0} toggleMusic to mute the music.";
 #pragma warning restore 414
 
    IEnumerator ProcessTwitchCommand (string Command) {
@@ -577,7 +579,7 @@ public class WAR : MonoBehaviour {
       }
    }
 
-   IEnumerator TwitchHandleForcedSolve () {
-      yield return null;
+   void TwitchHandleForcedSolve () {
+      Autosolved = true;
    }
 }
