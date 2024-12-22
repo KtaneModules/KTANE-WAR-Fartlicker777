@@ -295,7 +295,7 @@ public class WAR : MonoBehaviour {
       StartCoroutine(AlternatingFlash());
 
       foreach (string Mod in Bomb.GetModuleNames()) {
-         Debug.Log(Mod);
+         //Debug.Log(Mod);
          foreach (KeyValuePair<string, int> BossModPair in ModToTime) {
             if (Mod == BossModPair.Key) {
                TimeToAdd += BossModPair.Value;
@@ -340,7 +340,7 @@ public class WAR : MonoBehaviour {
          
          yield return new WaitForSeconds(.045f);
          CurrentlyBeingAdded--;
-         Debug.Log(CurrentlyBeingAdded);
+         //Debug.Log(CurrentlyBeingAdded);
       }
 
       Adding = false;
@@ -353,6 +353,12 @@ public class WAR : MonoBehaviour {
          CurrentTime--;
          if (PlaySFX) {
             Audio.PlaySoundAtTransform("Tick", transform);
+         }
+         if (Autosolved && CurrentTime <= 1) {
+            if (!Adding) {
+               CurrentlyBeingAdded += TimeToAdd;
+               AddTime = StartCoroutine(AddTimeToClockAnim());
+            }
          }
       }
       yield return new WaitForSeconds(1f);
@@ -388,6 +394,8 @@ public class WAR : MonoBehaviour {
       }
       
    }
+
+   #region LowTaperFade
 
    void StartFade () {
       IsFading = true;
@@ -437,6 +445,8 @@ public class WAR : MonoBehaviour {
          elapsed += Time.deltaTime;
       }
    }
+
+   #endregion
 
    void Update () { //Shit that happens at any point after initialization
 
@@ -549,8 +559,7 @@ public class WAR : MonoBehaviour {
    }
 
    void Strike () {
-      if (!Autosolved)
-         GetComponent<KMBombModule>().HandleStrike();
+      GetComponent<KMBombModule>().HandleStrike();
       GameMusic(true);
    }
 
