@@ -118,10 +118,10 @@ public class WAR : MonoBehaviour {
 
       string missionDesc = KTMissionGetter.Mission.Description;
       if (missionDesc != null) {
-         Regex regex = new Regex(@"\^WAR_DETONATE=$(true|false)");
+         Regex regex = new Regex(@"WAR_DETONATE=(true|false)");
          var match = regex.Match(missionDesc);
          if (match.Success) {
-            string[] options = match.Value.Replace("[WAR_DETONATE=] ", "").Split(',');
+            string[] options = match.Value.Replace("WAR_DETONATE=", "").Split(',');
             bool[] values = new bool[options.Length];
             for (int i = 0; i < options.Length; i++)
                values[i] = options[i] == "true" ? true : false;
